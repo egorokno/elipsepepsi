@@ -2,18 +2,10 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>3D + Sync Background Texture Switch</title>
-
+  <title>epsilonpepsi</title>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: black;
-    }
-
-    canvas {
-      display: block;
-    }
+    body { margin: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -23,20 +15,19 @@
 
 <script>
 let scene, camera, renderer;
-
-let object;
-let bgMesh;
+let object, bgMesh;
 
 let textures = [];
-let textureIndex = 0;
+let index = 0;
 
-let lastMouseX = 0;
-let accumulatedMove = 0;
+let lastX = 0;
+let move = 0;
 
 init();
 animate();
 
 function init() {
+
   scene = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(
@@ -49,104 +40,104 @@ function init() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // LIGHT
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(2, 2, 5);
-  scene.add(light);
+  // 💡 СВЕТ (очень важно)
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir.position.set(3, 3, 5);
+  scene.add(dir);
 
-  const loaderTex = new THREE.TextureLoader();
+  const loader = new THREE.TextureLoader();
 
-  // 🔥 ТЕКСТУРЫ (одни и те же для фона и модели)
   textures = [
-    loaderTex.load("tex1.jpg"),
-    loaderTex.load("tex2.jpg"),
-    loaderTex.load("tex3.jpg"),
-    loaderTex.load("tex4.jpg")
+    loader.load("tex1.jpg", () => console.log("tex1 ok")),
+    loader.load("tex2.jpg"),
+    loader.load("tex3.jpg"),
+    loader.load("tex4.jpg")
   ];
 
-  // =========================
-  // 🎯 ФОН (как огромный plane)
-  // =========================
-  const bgGeometry = new THREE.PlaneGeometry(20, 20);
-
-  const bgMaterial = new THREE.MeshBasicMaterial({
+  // 🌌 ФОН (уходит назад, не перекрывает)
+  const bg = new THREE.PlaneGeometry(50, 50);
+  const bgMat = new THREE.MeshBasicMaterial({
     map: textures[0],
-    depthWrite: false
+    side: THREE.DoubleSide
   });
 
-  bgMesh = new THREE.Mesh(bgGeometry, bgMaterial);
-  bgMesh.position.z = -5;
+  bgMesh = new THREE.Mesh(bg, bgMat);
+  bgMesh.position.z = -10;
   scene.add(bgMesh);
 
-  // =========================
-  // 📦 OBJ МОДЕЛЬ
-  // =========================
-  const loaderOBJ = new THREE.OBJLoader();
-  loaderOBJ.load("model.obj", (obj) => {
-    object = obj;
+  // 📦 МОДЕЛЬ
+  const objLoader = new THREE.OBJLoader();
 
-    object.traverse((child) => {
-      if (child.isMesh) {
-        child.material = new THREE.MeshStandardMaterial({
-          map: textures[0]
-        });
-      }
-    });
+  objLoader.load(
+    "model.obj",
+    (obj) => {
 
-    scene.add(object);
-  });
+      console.log("OBJ loaded");
 
-  window.addEventListener("mousemove", onMouseMove);
+      object = obj;
+
+      // центрирование + масштаб
+      const box = new THREE.Box3().setFromObject(object);
+      const size = box.getSize(new THREE.Vector3()).length();
+      const center = box.getCenter(new THREE.Vector3());
+
+      object.position.sub(center);
+      object.scale.setScalar(2 / size);
+
+      object.traverse((c) => {
+        if (c.isMesh) {
+          c.material = new THREE.MeshStandardMaterial({
+            map: textures[0]
+          });
+        }
+      });
+
+      scene.add(object);
+    },
+    undefined,
+    (err) => console.error("OBJ ERROR", err)
+  );
+
+  window.addEventListener("mousemove", onMove);
   window.addEventListener("resize", onResize);
 }
 
-function switchTexture() {
-  textureIndex = (textureIndex + 1) % textures.length;
+function switchTex() {
+  index = (index + 1) % textures.length;
 
-  // модель
   if (object) {
-    object.traverse((child) => {
-      if (child.isMesh) {
-        child.material.map = textures[textureIndex];
-        child.material.needsUpdate = true;
-      }
+    object.traverse(c => {
+      if (c.isMesh) c.material.map = textures[index];
     });
   }
 
-  // фон
   if (bgMesh) {
-    bgMesh.material.map = textures[textureIndex];
-    bgMesh.material.needsUpdate = true;
+    bgMesh.material.map = textures[index];
   }
 }
 
-function onMouseMove(event) {
-  const dx = event.clientX - lastMouseX;
-  lastMouseX = event.clientX;
+function onMove(e) {
+  const dx = e.clientX - lastX;
+  lastX = e.clientX;
 
-  accumulatedMove += Math.abs(dx);
+  move += Math.abs(dx);
 
-  // 🔥 каждые 5px — смена текстуры
-  if (accumulatedMove > 5) {
-    accumulatedMove = 0;
-    switchTexture();
+  if (move > 5) {
+    move = 0;
+    switchTex();
   }
 
-  // параллакс вращение модели
-  if (object) {
-    object.rotation.y += dx * 0.005;
-  }
+  if (object) object.rotation.y += dx * 0.005;
 }
 
 function onResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 }
 
 function animate() {
